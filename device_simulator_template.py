@@ -40,7 +40,7 @@ project_source_param = t.add_parameter(Parameter(
     "ProjectSource",
     Type="String",
     Description="Demo Project Source. Don't change unless you're using a clone/fork of the original project repo",
-    Default="https://github.com/cb17/aws-iot-device-management-demo"
+    Default="https://github.com/aws-samples/aws-iot-device-management-with-fleet-hub-demo"
 ))
 
 number_of_tasks = t.add_parameter(Parameter(
