@@ -1,0 +1,632 @@
+{
+    "Conditions": {
+        "AccountIDDefault": {
+            "Fn::Equals": [
+                {
+                    "Ref": "ECRAccountID"
+                },
+                "Optional"
+            ]
+        },
+        "ECRRepoDefault": {
+            "Fn::Equals": [
+                {
+                    "Ref": "ECRRepoName"
+                },
+                "Use Built-In"
+            ]
+        }
+    },
+    "Parameters": {
+        "ECRAccountID": {
+            "Default": "Optional",
+            "Description": "AccountID",
+            "Type": "String"
+        },
+        "ECRRepoName": {
+            "Default": "Use Built-In",
+            "Description": "Device Simulator ECR Repo. Modify if not using CloudFormation generated repo",
+            "Type": "String"
+        },
+        "IoTEndpoint": {
+            "AllowedPattern": "[a-zA-Z0-9]*",
+            "Description": "AWS IoT MQTT Endpoint PREFIX. ONLY INCLUDE THE CHARACTERS BEFORE THE FIRST DASH -",
+            "MaxLength": "14",
+            "Type": "String"
+        },
+        "NumberOfVirtualDevices": {
+            "Default": 0,
+            "Description": "Number of ECS Tasks to create. Each task simulates one device",
+            "Type": "Number"
+        },
+        "ProjectSource": {
+            "Default": "https://github.com/cb17/aws-iot-device-management-demo",
+            "Description": "Demo Project Source. Don't change unless you're using a clone/fork of the original project repo",
+            "Type": "String"
+        },
+        "VPCCIDRPrefix": {
+            "Default": "172.31",
+            "Description": "IP Address range for the VPN connected VPC",
+            "Type": "String"
+        }
+    },
+    "Resources": {
+        "AWSIoTDMDemoDeviceSimulatorRepo": {
+            "Condition": "ECRRepoDefault",
+            "Type": "AWS::ECR::Repository"
+        },
+        "AWSIoTDMDemoProject": {
+            "Condition": "ECRRepoDefault",
+            "Properties": {
+                "Artifacts": {
+                    "Type": "NO_ARTIFACTS"
+                },
+                "Environment": {
+                    "ComputeType": "BUILD_GENERAL1_LARGE",
+                    "EnvironmentVariables": [
+                        {
+                            "Name": "APP_NAME",
+                            "Value": "awsiotdmdemo"
+                        },
+                        {
+                            "Name": "IMAGE_REPO",
+                            "Value": {
+                                "Ref": "AWSIoTDMDemoDeviceSimulatorRepo"
+                            }
+                        },
+                        {
+                            "Name": "IMAGE_TAG",
+                            "Value": "latest"
+                        },
+                        {
+                            "Name": "AWS_DEFAULT_REGION",
+                            "Value": {
+                                "Ref": "AWS::Region"
+                            }
+                        },
+                        {
+                            "Name": "AWS_ACCOUNT_ID",
+                            "Value": {
+                                "Ref": "AWS::AccountId"
+                            }
+                        }
+                    ],
+                    "Image": "aws/codebuild/standard:5.0",
+                    "PrivilegedMode": "true",
+                    "Type": "LINUX_CONTAINER"
+                },
+                "Name": "AWS-IoT-DM-Demo",
+                "ServiceRole": {
+                    "Fn::GetAtt": [
+                        "CodebuildServiceRole",
+                        "Arn"
+                    ]
+                },
+                "Source": {
+                    "Location": {
+                        "Ref": "ProjectSource"
+                    },
+                    "Type": "GITHUB"
+                }
+            },
+            "Type": "AWS::CodeBuild::Project"
+        },
+        "AttachGateway": {
+            "Properties": {
+                "InternetGatewayId": {
+                    "Ref": "InternetGateway"
+                },
+                "VpcId": {
+                    "Ref": "VPC"
+                }
+            },
+            "Type": "AWS::EC2::VPCGatewayAttachment"
+        },
+        "CodebuildServiceRole": {
+            "Condition": "ECRRepoDefault",
+            "Properties": {
+                "AssumeRolePolicyDocument": {
+                    "Statement": [
+                        {
+                            "Action": [
+                                "sts:AssumeRole"
+                            ],
+                            "Effect": "Allow",
+                            "Principal": {
+                                "Service": [
+                                    "codebuild.amazonaws.com"
+                                ]
+                            }
+                        }
+                    ],
+                    "Version": "2012-10-17"
+                },
+                "Path": "/",
+                "Policies": [
+                    {
+                        "PolicyDocument": {
+                            "Statement": [
+                                {
+                                    "Action": [
+                                        "ecr:BatchCheckLayerAvailability",
+                                        "ecr:CompleteLayerUpload",
+                                        "ecr:GetAuthorizationToken",
+                                        "ecr:InitiateLayerUpload",
+                                        "ecr:PutImage",
+                                        "ecr:UploadLayerPart"
+                                    ],
+                                    "Effect": "Allow",
+                                    "Resource": {
+                                        "Fn::GetAtt": [
+                                            "AWSIoTDMDemoDeviceSimulatorRepo",
+                                            "Arn"
+                                        ]
+                                    }
+                                },
+                                {
+                                    "Action": [
+                                        "ecr:GetAuthorizationToken"
+                                    ],
+                                    "Effect": "Allow",
+                                    "Resource": "*"
+                                }
+                            ],
+                            "Version": "2012-10-17"
+                        },
+                        "PolicyName": "ECRPermissions"
+                    },
+                    {
+                        "PolicyDocument": {
+                            "Statement": [
+                                {
+                                    "Action": [
+                                        "logs:CreateLogGroup",
+                                        "logs:CreateLogStream",
+                                        "logs:PutLogEvents"
+                                    ],
+                                    "Effect": "Allow",
+                                    "Resource": {
+                                        "Fn::Sub": "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/codebuild/AWS-IoT-DM-Demo*"
+                                    }
+                                }
+                            ],
+                            "Version": "2012-10-17"
+                        },
+                        "PolicyName": "StandardCodeBuildPermissions"
+                    }
+                ]
+            },
+            "Type": "AWS::IAM::Role"
+        },
+        "DMDemoPolicy": {
+            "Properties": {
+                "PolicyDocument": {
+                    "Statement": [
+                        {
+                            "Action": "iot:Connect",
+                            "Condition": {
+                                "ForAllValues:StringEquals": {
+                                    "iot:Certificate.Subject.CommonName": "${iot:Connection.Thing.ThingName}"
+                                }
+                            },
+                            "Effect": "Allow",
+                            "Resource": {
+                                "Fn::Sub": "arn:aws:iot:${AWS::Region}:${AWS::AccountId}:client/${!iot:Connection.Thing.ThingName}"
+                            }
+                        },
+                        {
+                            "Action": "iot:Publish",
+                            "Effect": "Allow",
+                            "Resource": [
+                                {
+                                    "Fn::Sub": "arn:aws:iot:${AWS::Region}:${AWS::AccountId}:topic/demofleet/${!iot:Connection.Thing.ThingName}*"
+                                },
+                                {
+                                    "Fn::Sub": "arn:aws:iot:${AWS::Region}:${AWS::AccountId}:topic/$aws/things/${!iot:Connection.Thing.ThingName}*"
+                                }
+                            ]
+                        },
+                        {
+                            "Action": "iot:Subscribe",
+                            "Effect": "Allow",
+                            "Resource": [
+                                {
+                                    "Fn::Sub": "arn:aws:iot:${AWS::Region}:${AWS::AccountId}:topicfilter/demofleet/${!iot:Connection.Thing.ThingName}*"
+                                },
+                                {
+                                    "Fn::Sub": "arn:aws:iot:${AWS::Region}:${AWS::AccountId}:topicfilter/$aws/things/${!iot:Connection.Thing.ThingName}*"
+                                }
+                            ]
+                        },
+                        {
+                            "Action": "iot:Receive",
+                            "Effect": "Allow",
+                            "Resource": [
+                                {
+                                    "Fn::Sub": "arn:aws:iot:${AWS::Region}:${AWS::AccountId}:topic/demofleet/${!iot:Connection.Thing.ThingName}*"
+                                },
+                                {
+                                    "Fn::Sub": "arn:aws:iot:${AWS::Region}:${AWS::AccountId}:topic/$aws/things/${!iot:Connection.Thing.ThingName}*"
+                                }
+                            ]
+                        }
+                    ],
+                    "Version": "2012-10-17"
+                }
+            },
+            "Type": "AWS::IoT::Policy"
+        },
+        "DeviceSimulatorTask": {
+            "Properties": {
+                "ContainerDefinitions": [
+                    {
+                        "Environment": [
+                            {
+                                "Name": "IOT_ENDPOINT",
+                                "Value": {
+                                    "Ref": "IoTEndpoint"
+                                }
+                            },
+                            {
+                                "Name": "IOT_REGION",
+                                "Value": {
+                                    "Ref": "AWS::Region"
+                                }
+                            },
+                            {
+                                "Name": "IOT_POLICY_NAME",
+                                "Value": {
+                                    "Ref": "DMDemoPolicy"
+                                }
+                            }
+                        ],
+                        "Essential": "true",
+                        "Image": {
+                            "Fn::If": [
+                                "ECRRepoDefault",
+                                {
+                                    "Fn::Join": [
+                                        "",
+                                        [
+                                            {
+                                                "Fn::If": [
+                                                    "AccountIDDefault",
+                                                    {
+                                                        "Ref": "AWS::AccountId"
+                                                    },
+                                                    {
+                                                        "Ref": "ECRAccountID"
+                                                    }
+                                                ]
+                                            },
+                                            ".dkr.ecr.",
+                                            {
+                                                "Ref": "AWS::Region"
+                                            },
+                                            ".amazonaws.com/",
+                                            {
+                                                "Ref": "AWSIoTDMDemoDeviceSimulatorRepo"
+                                            }
+                                        ]
+                                    ]
+                                },
+                                {
+                                    "Ref": "ECRRepoName"
+                                }
+                            ]
+                        },
+                        "LogConfiguration": {
+                            "LogDriver": "awslogs",
+                            "Options": {
+                                "awslogs-group": {
+                                    "Ref": "TaskLogGroup"
+                                },
+                                "awslogs-region": {
+                                    "Ref": "AWS::Region"
+                                },
+                                "awslogs-stream-prefix": "simulated-device"
+                            }
+                        },
+                        "Name": "IoTClient"
+                    }
+                ],
+                "Cpu": "256",
+                "ExecutionRoleArn": {
+                    "Fn::GetAtt": [
+                        "DeviceSimulatorTaskRole",
+                        "Arn"
+                    ]
+                },
+                "Memory": "512",
+                "NetworkMode": "awsvpc",
+                "RequiresCompatibilities": [
+                    "FARGATE"
+                ],
+                "TaskRoleArn": {
+                    "Fn::GetAtt": [
+                        "DeviceSimulatorTaskRole",
+                        "Arn"
+                    ]
+                }
+            },
+            "Type": "AWS::ECS::TaskDefinition"
+        },
+        "DeviceSimulatorTaskRole": {
+            "Properties": {
+                "AssumeRolePolicyDocument": {
+                    "Statement": [
+                        {
+                            "Action": [
+                                "sts:AssumeRole"
+                            ],
+                            "Effect": "Allow",
+                            "Principal": {
+                                "Service": [
+                                    "ecs-tasks.amazonaws.com"
+                                ]
+                            }
+                        }
+                    ],
+                    "Version": "2012-10-17"
+                },
+                "ManagedPolicyArns": [
+                    "arn:aws:iam::aws:policy/CloudWatchFullAccess",
+                    "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy",
+                    "arn:aws:iam::aws:policy/service-role/AWSIoTThingsRegistration"
+                ],
+                "Path": "/"
+            },
+            "Type": "AWS::IAM::Role"
+        },
+        "ECSService": {
+            "Properties": {
+                "Cluster": {
+                    "Ref": "ECSServiceCluster"
+                },
+                "DesiredCount": {
+                    "Ref": "NumberOfVirtualDevices"
+                },
+                "LaunchType": "FARGATE",
+                "NetworkConfiguration": {
+                    "AwsvpcConfiguration": {
+                        "AssignPublicIp": "ENABLED",
+                        "Subnets": [
+                            {
+                                "Ref": "PublicSubnetA"
+                            },
+                            {
+                                "Ref": "PublicSubnetB"
+                            },
+                            {
+                                "Ref": "PublicSubnetC"
+                            }
+                        ]
+                    }
+                },
+                "TaskDefinition": {
+                    "Ref": "DeviceSimulatorTask"
+                }
+            },
+            "Type": "AWS::ECS::Service"
+        },
+        "ECSServiceCluster": {
+            "Type": "AWS::ECS::Cluster"
+        },
+        "InternetGateway": {
+            "Properties": {
+                "Tags": [
+                    {
+                        "Key": "Network",
+                        "Value": "igw"
+                    }
+                ]
+            },
+            "Type": "AWS::EC2::InternetGateway"
+        },
+        "NAT": {
+            "Properties": {
+                "AllocationId": {
+                    "Fn::GetAtt": [
+                        "NatEip",
+                        "AllocationId"
+                    ]
+                },
+                "SubnetId": {
+                    "Ref": "PublicSubnetA"
+                }
+            },
+            "Type": "AWS::EC2::NatGateway"
+        },
+        "NatEip": {
+            "Properties": {
+                "Domain": "vpc"
+            },
+            "Type": "AWS::EC2::EIP"
+        },
+        "PublicRouteTable": {
+            "Properties": {
+                "Tags": [
+                    {
+                        "Key": "Network",
+                        "Value": "public"
+                    }
+                ],
+                "VpcId": {
+                    "Ref": "VPC"
+                }
+            },
+            "Type": "AWS::EC2::RouteTable"
+        },
+        "PublicSubnetA": {
+            "Properties": {
+                "AvailabilityZone": {
+                    "Fn::Select": [
+                        "0",
+                        {
+                            "Fn::GetAZs": {
+                                "Ref": "AWS::Region"
+                            }
+                        }
+                    ]
+                },
+                "CidrBlock": {
+                    "Fn::Join": [
+                        "",
+                        [
+                            {
+                                "Ref": "VPCCIDRPrefix"
+                            },
+                            ".0.0/26"
+                        ]
+                    ]
+                },
+                "VpcId": {
+                    "Ref": "VPC"
+                }
+            },
+            "Type": "AWS::EC2::Subnet"
+        },
+        "PublicSubnetB": {
+            "Properties": {
+                "AvailabilityZone": {
+                    "Fn::Select": [
+                        "1",
+                        {
+                            "Fn::GetAZs": {
+                                "Ref": "AWS::Region"
+                            }
+                        }
+                    ]
+                },
+                "CidrBlock": {
+                    "Fn::Join": [
+                        "",
+                        [
+                            {
+                                "Ref": "VPCCIDRPrefix"
+                            },
+                            ".0.64/26"
+                        ]
+                    ]
+                },
+                "VpcId": {
+                    "Ref": "VPC"
+                }
+            },
+            "Type": "AWS::EC2::Subnet"
+        },
+        "PublicSubnetC": {
+            "Properties": {
+                "AvailabilityZone": {
+                    "Fn::Select": [
+                        "2",
+                        {
+                            "Fn::GetAZs": {
+                                "Ref": "AWS::Region"
+                            }
+                        }
+                    ]
+                },
+                "CidrBlock": {
+                    "Fn::Join": [
+                        "",
+                        [
+                            {
+                                "Ref": "VPCCIDRPrefix"
+                            },
+                            ".0.128/26"
+                        ]
+                    ]
+                },
+                "VpcId": {
+                    "Ref": "VPC"
+                }
+            },
+            "Type": "AWS::EC2::Subnet"
+        },
+        "PublicSubnetRouteTableAssociationA": {
+            "Properties": {
+                "RouteTableId": {
+                    "Ref": "PublicRouteTable"
+                },
+                "SubnetId": {
+                    "Ref": "PublicSubnetA"
+                }
+            },
+            "Type": "AWS::EC2::SubnetRouteTableAssociation"
+        },
+        "PublicSubnetRouteTableAssociationB": {
+            "Properties": {
+                "RouteTableId": {
+                    "Ref": "PublicRouteTable"
+                },
+                "SubnetId": {
+                    "Ref": "PublicSubnetB"
+                }
+            },
+            "Type": "AWS::EC2::SubnetRouteTableAssociation"
+        },
+        "PublicSubnetRouteTableAssociationC": {
+            "Properties": {
+                "RouteTableId": {
+                    "Ref": "PublicRouteTable"
+                },
+                "SubnetId": {
+                    "Ref": "PublicSubnetC"
+                }
+            },
+            "Type": "AWS::EC2::SubnetRouteTableAssociation"
+        },
+        "RouteToInternetForPublicSubnets": {
+            "Properties": {
+                "DestinationCidrBlock": "0.0.0.0/0",
+                "GatewayId": {
+                    "Ref": "InternetGateway"
+                },
+                "RouteTableId": {
+                    "Ref": "PublicRouteTable"
+                }
+            },
+            "Type": "AWS::EC2::Route"
+        },
+        "TaskLogGroup": {
+            "Properties": {
+                "LogGroupName": {
+                    "Fn::Sub": "${AWS::StackName}-IoTClientLogs"
+                },
+                "RetentionInDays": 30
+            },
+            "Type": "AWS::Logs::LogGroup"
+        },
+        "VPC": {
+            "Properties": {
+                "CidrBlock": {
+                    "Fn::Join": [
+                        "",
+                        [
+                            {
+                                "Ref": "VPCCIDRPrefix"
+                            },
+                            ".0.0/16"
+                        ]
+                    ]
+                },
+                "EnableDnsHostnames": "true",
+                "EnableDnsSupport": "true",
+                "Tags": [
+                    {
+                        "Key": "Application",
+                        "Value": {
+                            "Ref": "AWS::StackName"
+                        }
+                    },
+                    {
+                        "Key": "Network",
+                        "Value": "VPC"
+                    }
+                ]
+            },
+            "Type": "AWS::EC2::VPC"
+        }
+    }
+}
