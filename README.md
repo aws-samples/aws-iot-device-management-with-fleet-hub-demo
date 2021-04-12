@@ -29,6 +29,9 @@ This demo uses CloudFormation and the AWS IoT Python SDK v1. To create the demo,
 Required IAM permissions:
 Admin level permissions are required
 
+## Associated Content
+Video: https://www.youtube.com/watch?v=SqSS174GTYo&t
+
 ## Setup
 
 ### Creating your virtual device fleet
