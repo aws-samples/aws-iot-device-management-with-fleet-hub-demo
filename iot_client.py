@@ -380,7 +380,7 @@ class IoTThing(AWSIoTMQTTClient):
 
     def firmware_upgrade(self, job_document):
         self.shadow['firmware_version'] = job_document['firmware_version']
-        self.report_shadow({"firmware_version": job_document['firmware_version']}, "default")
+        self.report_shadow({"firmware_version": job_document['firmware_version']})
 
     def heartbeater(self):
         while True:
@@ -439,7 +439,7 @@ class IoTThing(AWSIoTMQTTClient):
         self.disconnectAsync()
         time.sleep(3)
         self.connect()
-        self.shadow_listener("default")
+        self.shadow_listener()
         self.init_jobs_client()
         self.heartbeater()
 
