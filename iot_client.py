@@ -170,26 +170,32 @@ class IoTThing(AWSIoTMQTTClient):
             print("Too many attempts")
             raise Exception
 
-        self.shadow_listener("default")
+        self.shadow_listener()
         print("Initialized shadow listener")
 
         print("Reporting initial shadow")
-        self.report_shadow(self.shadow, "default", False)
+        self.report_shadow(self.shadow)
 
         self.init_jobs_client()
         print("IoT Client initialization completed")
 
     # Handle communication with AWS IoT Shadow Service
-    def shadow_listener(self, shadow_name):
-        self.subscribe("$aws/things/{0}/shadow/name/{1}/update/accepted".format(self.thing_name, shadow_name), 1, self.shadow_callback)
-
-    def report_shadow(self, shadow_value, shadow_name, clear_desired=False):
+    def shadow_listener(self, shadow_name=None):
+        if shadow_name:
+            self.subscribe("$aws/things/{0}/shadow/name/{1}/update/accepted".format(self.thing_name, shadow_name), 1, self.shadow_callback)
+        else:
+            self.subscribe("$aws/things/{0}/shadow/update/accepted".format(self.thing_name), 1, self.shadow_callback)
+    def report_shadow(self, shadow_value, shadow_name=None, clear_desired=False):
         new_shadow = {
             "state": {
                 "reported": shadow_value
             }
         }
-        shadow_topic = "$aws/things/{0}/shadow/name/{1}/update".format(self.thing_name, shadow_name)
+        if shadow_name:
+            shadow_topic = "$aws/things/{0}/shadow/name/{1}/update".format(self.thing_name, shadow_name)
+        else:
+            shadow_topic = "$aws/things/{0}/shadow/update".format(self.thing_name)
+            
         if clear_desired:
             new_shadow['state']['desired'] = None
         self.publish(shadow_topic, json.dumps(new_shadow), 0)
@@ -217,7 +223,7 @@ class IoTThing(AWSIoTMQTTClient):
             if key == "heartbeat":
                 self.send_heartbeats = value
             self.shadow[key] = value
-        self.report_shadow(self.shadow, "default", True)
+        self.report_shadow(self.shadow, clear_desired=True)
 
     # Handle communication with AWS IoT Jobs Service
     def init_jobs_client(self):
