@@ -31,7 +31,8 @@
         "AttributePayload": {},
         "ThingName": {
           "Ref": "SerialNumber"
-        }
+        },
+        "ThingTypeName": "dispenserV1"
       },
       "Type": "AWS::IoT::Thing"
     }
