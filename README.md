@@ -33,13 +33,16 @@ Admin level permissions are required
 Video: https://www.youtube.com/watch?v=SqSS174GTYo&t
 
 ## Setup
+1) In the AWS IoT console, switch regions to us-east-1 if you're not already there.
+2) Click "Manage" in the left sidebar and then "Types" On hte next page that loads, click "Create Thing Type"
+3) Under Thing type name enter in "dispenserV1" and click Create thing type.
 
 ### Creating your virtual device fleet
 
-1) Enable Fleet Indexing in the region. You can either do that through the "settings" in the IoT Console or through the CLI with this command: 
+1) Enable Fleet Indexing in the region. You can either do that through the "settings" in the IoT Console or through the CLI with this command:
 aws iot update-indexing-configuration \
   --thing-indexing-configuration thingIndexingMode=REGISTRY_AND_SHADOW,thingConnectivityIndexingMode=STATUS \
-  --thing-group-indexing-configuration thingGroupIndexingMode=ON 
+  --thing-group-indexing-configuration thingGroupIndexingMode=ON
 2) Launch CloudFormation template iot_dm_cloudformation.json
 3) Start a build of the CodeBuild project that was created in the CloudFormation stack. A link to the project can be found in the CloudFormation resources section.
 4) Open the ECS Service created from the CloudFormation stack (also shown in the CloudFormation resources) and increase number of tasks to desired count.
@@ -48,7 +51,7 @@ You now have virtual devices running and connected to AWS IoT. They are ready to
 
 ### Fleet Hub setup
 
-1) In the AWS IoT console, switch regions to us-east-1 if you're not already there. 
+1) In the AWS IoT console, switch regions to us-east-1 if you're not already there.
 2) Click "Fleet Hub" in the left sidebar and then "Get Started". On the next page that loads to the right, click "Create Application".
 3) Because Fleet Hub uses AWS SSO instead of IAM to manage users, you'll be prompted to setup AWS SSO if you haven't already done so.
 4) Once AWS SSO setup is done, click "Next" and you'll be taken to the Fleet Indexing setup. Because you already completed this step earlier, simply click "Next".
@@ -67,7 +70,7 @@ You now have virtual devices running and connected to AWS IoT. They are ready to
 The virtual devices update 3 shadow attributes that can be filtered on in the Fleet Hub application: "firmware_version", "battery_state_of_charge", and "temperature".
 The devices also support 2 types of jobs:
  - Mock firmware updates
- - A job called "order_66" that causes devices to randomly misbehave. 
+ - A job called "order_66" that causes devices to randomly misbehave.
 Examples of the docs that the devices will accept are in the "job_docs" folder. You will need to configure the S3 bucket and jobs themselves on your own.
 
 ## Cleanup
