@@ -1,6 +1,6 @@
 {
   "Parameters": {
-    "SerialNumber": {
+    "ThingName": {
       "Type": "String"
     },
     "AWS::IoT::Certificate::Id": {
@@ -30,7 +30,7 @@
       "Properties": {
         "AttributePayload": {},
         "ThingName": {
-          "Ref": "SerialNumber"
+          "Ref": "ThingName"
         },
         "ThingTypeName": "dispenserV1"
       },

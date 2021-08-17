@@ -38,13 +38,13 @@ backOffCore = ProgressiveBackOffCore()
 class IoTThing(AWSIoTMQTTClient):
     def __init__(self):
         self.serial_number = str(uuid.uuid4())
-        self.thing_name = self.serial_number
+        self.thing_name = "fh_workshop_" + self.serial_number
         self.iot_endpoint = "{0}-ats.iot.{1}.amazonaws.com".format(
             os.environ.get("IOT_ENDPOINT"),
             os.environ.get("IOT_REGION")
         )
         print("Using endpoint: {0}".format(self.iot_endpoint))
-        super().__init__(self.serial_number)
+        super().__init__("fh_workshop_"+ self.serial_number)
         self.private_key, self.private_key_pem = self.generate_private_key()
         self.certificate_pem = None
         self.csr = self.gen_csr(self.private_key)
@@ -67,7 +67,7 @@ class IoTThing(AWSIoTMQTTClient):
         }
         self.shadow = self.initial_shadow
 
-        print("Initialized new thing with serial: {0}".format(self.serial_number))
+        print("Initialized new thing with serial: {0}".format("fh_workshop_"+self.serial_number))
         self.fp_mqtt_client = None
         self.certificate_ownership_token = None
         self.cert_id = None
@@ -134,7 +134,7 @@ class IoTThing(AWSIoTMQTTClient):
         boto_iot_client.register_thing(
             templateBody=json.dumps(prov_template_object),
             parameters={
-                "SerialNumber": self.serial_number,
+                "ThingName": self.thing_name,
                 "AWS::IoT::Certificate::Id": certificate_data['certificateId']
             }
         )
@@ -195,7 +195,7 @@ class IoTThing(AWSIoTMQTTClient):
             shadow_topic = "$aws/things/{0}/shadow/name/{1}/update".format(self.thing_name, shadow_name)
         else:
             shadow_topic = "$aws/things/{0}/shadow/update".format(self.thing_name)
-            
+
         if clear_desired:
             new_shadow['state']['desired'] = None
         self.publish(shadow_topic, json.dumps(new_shadow), 0)
